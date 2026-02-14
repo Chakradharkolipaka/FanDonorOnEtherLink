@@ -54,9 +54,9 @@ export async function GET(
       toBlock: "latest",
     });
 
-    const donations = logs.map((log) => ({
-      donor: log.args.donor,
-      amount: log.args.amount?.toString() || "0",
+    const donations = logs.map((log: any) => ({
+      donor: log.args?.donor as string,
+      amount: log.args?.amount?.toString() || "0",
       blockNumber: log.blockNumber.toString(),
       transactionHash: log.transactionHash,
     }));
