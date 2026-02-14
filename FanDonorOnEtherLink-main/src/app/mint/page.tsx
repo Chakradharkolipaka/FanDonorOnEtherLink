@@ -51,31 +51,49 @@ export default function MintPage() {
     }
 
     try {
+      toast({
+        title: "Uploading to IPFS...",
+        description: "Please wait while we upload your NFT to IPFS.",
+      });
+
       // Upload to Pinata via server-side API route
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", name);
       formData.append("description", description);
 
+      console.log("Uploading to /api/pinata/upload...");
       const uploadRes = await fetch("/api/pinata/upload", {
         method: "POST",
         body: formData,
       });
 
+      console.log("Upload response status:", uploadRes.status);
+
       if (!uploadRes.ok) {
-        const errData = await uploadRes.json();
-        throw new Error(errData.error || "Failed to upload to IPFS");
+        const errData = await uploadRes.json().catch(() => ({ error: "Unknown error" }));
+        console.error("Upload error:", errData);
+        throw new Error(errData.error || `Upload failed with status ${uploadRes.status}`);
       }
 
-      const { tokenURI } = await uploadRes.json();
+      const uploadData = await uploadRes.json();
+      console.log("Upload response:", uploadData);
+      const { tokenURI } = uploadData;
 
       if (!tokenURI) {
         throw new Error("Failed to get token URI from upload");
       }
 
+      console.log("Token URI:", tokenURI);
+
       if (!contractAddress) {
         throw new Error("Contract address is not defined in environment variables.");
       }
+
+      toast({
+        title: "Minting NFT...",
+        description: "Please confirm the transaction in your wallet.",
+      });
 
       writeContract({
         address: contractAddress,
@@ -85,7 +103,7 @@ export default function MintPage() {
       });
 
     } catch (error) {
-      console.error(error);
+      console.error("Minting error:", error);
       toast({
         title: "Minting Failed",
         description: error instanceof Error ? error.message : String(error),
