@@ -12,6 +12,9 @@ import { contractAddress, contractAbi } from "@/constants";
 import { Loader2, Upload } from "lucide-react";
 import Image from "next/image";
 
+// Fallback contract address in case env var is not set
+const CONTRACT_ADDRESS = contractAddress || "0x7F8096DE700dBb72F87c80b4fff77FDb070dC66A";
+
 export default function MintPage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -27,6 +30,14 @@ export default function MintPage() {
     useWaitForTransactionReceipt({ 
       hash, 
     });
+
+  // Log contract address on mount
+  React.useEffect(() => {
+    console.log("Contract address from env:", contractAddress);
+    console.log("Using contract address:", CONTRACT_ADDRESS);
+    console.log("Contract address length:", CONTRACT_ADDRESS?.length);
+    console.log("Starts with 0x:", CONTRACT_ADDRESS?.startsWith("0x"));
+  }, []);
 
   const handleFileChange = (files: FileList | null) => {
     if (files && files[0]) {
@@ -108,12 +119,14 @@ export default function MintPage() {
 
       console.log("Token URI:", tokenURI);
 
-      if (!contractAddress) {
-        throw new Error("Contract address is not defined in environment variables.");
+      // Validate contract address before calling writeContract
+      if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS.length !== 42 || !CONTRACT_ADDRESS.startsWith("0x")) {
+        console.error("Invalid contract address:", CONTRACT_ADDRESS);
+        throw new Error(`Invalid contract address: ${CONTRACT_ADDRESS}. Please check environment variables.`);
       }
 
       console.log("Calling writeContract with:", {
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         functionName: 'mintNFT',
         args: [tokenURI],
         account: address,
@@ -125,7 +138,7 @@ export default function MintPage() {
       });
 
       const result = writeContract({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS as `0x${string}`,
         abi: contractAbi,
         functionName: 'mintNFT',
         args: [tokenURI],
