@@ -116,34 +116,6 @@ export default function Home() {
     setHiddenTokenIds((prev) => (prev.includes(tokenId) ? prev : [...prev, tokenId]));
   }, []);
 
-  const handleTotalsChange = useCallback(() => {
-    refetchNftData();
-    fetchTopDonors(); // Also refresh top donors
-  }, [refetchNftData, fetchTopDonors]);
-
-  const handleDonation = useCallback(
-    ({ donor, amount, tokenId }: { donor: string; amount: bigint; tokenId: number }) => {
-      setDonorStats((prev) => {
-        const current = prev[donor] ?? { total: 0n, donations: [] };
-        const nft = nfts.find((nft) => nft.tokenId === tokenId);
-
-        return {
-          ...prev,
-          [donor]: {
-            total: current.total + amount,
-            donations: [
-              ...current.donations,
-              { tokenId, amount, name: nft?.metadata?.name },
-            ],
-          },
-        };
-      });
-      // Refetch top donors from blockchain after donation
-      fetchTopDonors();
-    },
-    [nfts]
-  );
-
   // Fetch top donors from blockchain
   const fetchTopDonors = useCallback(async () => {
     if (!totalSupply || !contractAddress) {
@@ -198,6 +170,34 @@ export default function Home() {
       setIsLoadingDonors(false);
     }
   }, [totalSupply, contractAddress]);
+
+  const handleTotalsChange = useCallback(() => {
+    refetchNftData();
+    fetchTopDonors(); // Also refresh top donors
+  }, [refetchNftData, fetchTopDonors]);
+
+  const handleDonation = useCallback(
+    ({ donor, amount, tokenId }: { donor: string; amount: bigint; tokenId: number }) => {
+      setDonorStats((prev) => {
+        const current = prev[donor] ?? { total: 0n, donations: [] };
+        const nft = nfts.find((nft) => nft.tokenId === tokenId);
+
+        return {
+          ...prev,
+          [donor]: {
+            total: current.total + amount,
+            donations: [
+              ...current.donations,
+              { tokenId, amount, name: nft?.metadata?.name },
+            ],
+          },
+        };
+      });
+      // Refetch top donors from blockchain after donation
+      fetchTopDonors();
+    },
+    [nfts, fetchTopDonors]
+  );
 
   // Fetch top donors when NFTs are loaded
   useEffect(() => {
