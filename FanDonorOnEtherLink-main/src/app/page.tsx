@@ -27,6 +27,8 @@ export default function Home() {
   const [nfts, setNfts] = useState<NftData[]>([]);
   const [hiddenTokenIds, setHiddenTokenIds] = useState<number[]>([]);
   const [donorStats, setDonorStats] = useState<Record<string, DonorStat>>({});
+  const [topDonors, setTopDonors] = useState<Array<{ address: string; total: bigint; nftsDonatedTo: number }>>([]);
+  const [isLoadingDonors, setIsLoadingDonors] = useState(false);
 
   const { data: totalSupply, isLoading: isLoadingTotalSupply } = useReadContract({
     address: contractAddress,
@@ -116,7 +118,8 @@ export default function Home() {
 
   const handleTotalsChange = useCallback(() => {
     refetchNftData();
-  }, [refetchNftData]);
+    fetchTopDonors(); // Also refresh top donors
+  }, [refetchNftData, fetchTopDonors]);
 
   const handleDonation = useCallback(
     ({ donor, amount, tokenId }: { donor: string; amount: bigint; tokenId: number }) => {
@@ -135,22 +138,73 @@ export default function Home() {
           },
         };
       });
+      // Refetch top donors from blockchain after donation
+      fetchTopDonors();
     },
     [nfts]
   );
 
-  const topDonors = useMemo(() => {
-    const entries = Object.entries(donorStats);
-    return entries
-      .map(([address, stat]) => ({
-        address,
-        total: stat.total,
-        lastDonation: stat.donations[stat.donations.length - 1],
-      }))
-      .filter((entry) => entry.total > 0n)
-      .sort((a, b) => (a.total < b.total ? 1 : -1))
-      .slice(0, 10);
-  }, [donorStats]);
+  // Fetch top donors from blockchain
+  const fetchTopDonors = useCallback(async () => {
+    if (!totalSupply || !contractAddress) {
+      return;
+    }
+
+    try {
+      setIsLoadingDonors(true);
+      const donorMap = new Map<string, { totalAmount: bigint; nftsDonatedTo: number }>();
+
+      // Fetch donation data for all NFTs
+      for (let tokenId = 1; tokenId <= Number(totalSupply); tokenId++) {
+        try {
+          const response = await fetch(`/api/donations/${tokenId}`);
+          
+          if (!response.ok) continue;
+          
+          const donations = await response.json();
+
+          // Aggregate donations by donor address
+          donations.forEach((donation: { donor: string; amount: string }) => {
+            const existing = donorMap.get(donation.donor);
+            if (existing) {
+              existing.totalAmount += BigInt(donation.amount);
+              existing.nftsDonatedTo += 1;
+            } else {
+              donorMap.set(donation.donor, {
+                totalAmount: BigInt(donation.amount),
+                nftsDonatedTo: 1,
+              });
+            }
+          });
+        } catch (err) {
+          console.error(`Error fetching donations for token ${tokenId}:`, err);
+        }
+      }
+
+      // Convert to array and sort by total amount
+      const sortedDonors = Array.from(donorMap.entries())
+        .map(([address, data]) => ({
+          address,
+          total: data.totalAmount,
+          nftsDonatedTo: data.nftsDonatedTo,
+        }))
+        .sort((a, b) => (b.total > a.total ? 1 : -1))
+        .slice(0, 10); // Top 10
+
+      setTopDonors(sortedDonors);
+    } catch (error) {
+      console.error("Error fetching donor data:", error);
+    } finally {
+      setIsLoadingDonors(false);
+    }
+  }, [totalSupply, contractAddress]);
+
+  // Fetch top donors when NFTs are loaded
+  useEffect(() => {
+    if (nfts.length > 0) {
+      fetchTopDonors();
+    }
+  }, [nfts.length, fetchTopDonors]);
 
   return (
     <main className="container mx-auto px-4 py-10 space-y-10">
@@ -222,9 +276,22 @@ export default function Home() {
           <div className="rounded-2xl border bg-card dark:bg-gradient-to-br dark:from-slate-900/80 dark:to-slate-800/80 p-6">
             <h2 className="text-xl font-semibold mb-1">Top Fan Donors</h2>
             <p className="text-sm text-muted-foreground mb-4">
-              Most generous supporters across all NFTs (this session).
+              Most generous supporters across all NFTs (all-time).
             </p>
-            {topDonors.length === 0 ? (
+            {isLoadingDonors ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-lg bg-background/60 px-3 py-2 animate-pulse">
+                    <div className="w-6 h-4 bg-muted rounded" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-muted rounded w-24" />
+                      <div className="h-2 bg-muted rounded w-16" />
+                    </div>
+                    <div className="h-4 bg-muted rounded w-16" />
+                  </div>
+                ))}
+              </div>
+            ) : topDonors.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No fan donations yet. Be the first to support a creator.
               </p>
@@ -243,15 +310,13 @@ export default function Home() {
                         <span className="text-sm font-medium truncate">
                           {entry.address.slice(0, 6)}...{entry.address.slice(-4)}
                         </span>
-                        {entry.lastDonation?.name && (
-                          <span className="text-xs text-muted-foreground truncate">
-                            To {entry.lastDonation.name}
-                          </span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                          Donated to {entry.nftsDonatedTo} NFT{entry.nftsDonatedTo !== 1 ? 's' : ''}
+                        </span>
                       </div>
                     </div>
                     <span className="text-sm font-semibold">
-                      {formatEther(entry.total)} ETH
+                      {formatEther(entry.total)} XTZ
                     </span>
                   </li>
                 ))}
