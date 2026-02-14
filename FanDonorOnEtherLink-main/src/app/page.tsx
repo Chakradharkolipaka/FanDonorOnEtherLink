@@ -119,21 +119,31 @@ export default function Home() {
   // Fetch top donors from blockchain
   const fetchTopDonors = useCallback(async () => {
     if (!totalSupply || !contractAddress) {
+      console.log("Cannot fetch donors - missing totalSupply or contractAddress", { totalSupply, contractAddress });
       return;
     }
 
     try {
+      console.log("Fetching top donors for", Number(totalSupply), "NFTs");
       setIsLoadingDonors(true);
       const donorMap = new Map<string, { totalAmount: bigint; nftsDonatedTo: number }>();
 
       // Fetch donation data for all NFTs
       for (let tokenId = 1; tokenId <= Number(totalSupply); tokenId++) {
         try {
-          const response = await fetch(`/api/donations/${tokenId}`);
+          const url = `/api/donations/${tokenId}`;
+          console.log("Fetching donations from:", url);
+          const response = await fetch(url);
           
-          if (!response.ok) continue;
+          console.log(`Token ${tokenId} response status:`, response.status);
+          
+          if (!response.ok) {
+            console.warn(`Failed to fetch donations for token ${tokenId}`);
+            continue;
+          }
           
           const donations = await response.json();
+          console.log(`Token ${tokenId} donations:`, donations);
 
           // Aggregate donations by donor address
           donations.forEach((donation: { donor: string; amount: string }) => {
@@ -153,6 +163,8 @@ export default function Home() {
         }
       }
 
+      console.log("Total unique donors found:", donorMap.size);
+
       // Convert to array and sort by total amount
       const sortedDonors = Array.from(donorMap.entries())
         .map(([address, data]) => ({
@@ -163,6 +175,7 @@ export default function Home() {
         .sort((a, b) => (b.total > a.total ? 1 : -1))
         .slice(0, 10); // Top 10
 
+      console.log("Top donors:", sortedDonors);
       setTopDonors(sortedDonors);
     } catch (error) {
       console.error("Error fetching donor data:", error);
