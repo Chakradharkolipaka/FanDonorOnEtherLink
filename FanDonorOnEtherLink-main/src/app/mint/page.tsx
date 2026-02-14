@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { uploadToIPFS } from "@/lib/ipfs";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { contractAddress, contractAbi } from "@/constants";
 import { Loader2, Upload } from "lucide-react";
@@ -52,9 +51,26 @@ export default function MintPage() {
     }
 
     try {
-      const tokenURI = await uploadToIPFS(file, name, description);
+      // Upload to Pinata via server-side API route
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", name);
+      formData.append("description", description);
+
+      const uploadRes = await fetch("/api/pinata/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json();
+        throw new Error(errData.error || "Failed to upload to IPFS");
+      }
+
+      const { tokenURI } = await uploadRes.json();
+
       if (!tokenURI) {
-        throw new Error("Failed to upload to IPFS");
+        throw new Error("Failed to get token URI from upload");
       }
 
       if (!contractAddress) {
