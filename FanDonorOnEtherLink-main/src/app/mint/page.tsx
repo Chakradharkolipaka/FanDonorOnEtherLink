@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
 import { contractAddress, contractAbi } from "@/constants";
 import { Loader2, Upload } from "lucide-react";
 import Image from "next/image";
@@ -19,7 +19,9 @@ export default function MintPage() {
   const [description, setDescription] = useState("");
   const { toast } = useToast();
 
-  const { data: hash, writeContract, isPending: isMinting } = useWriteContract();
+  const { address, isConnected } = useAccount();
+  const chainId = useChainId();
+  const { data: hash, writeContract, isPending: isMinting, error: writeError } = useWriteContract();
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = 
     useWaitForTransactionReceipt({ 
@@ -45,6 +47,26 @@ export default function MintPage() {
       toast({
         title: "Error",
         description: "Please fill in all fields and select an image.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check wallet connection
+    if (!isConnected || !address) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first using the Connect Wallet button.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if on correct network
+    if (chainId !== 127823) {
+      toast({
+        title: "Wrong Network",
+        description: "Please switch to Etherlink Shadownet (Chain ID: 127823) in your wallet.",
         variant: "destructive",
       });
       return;
@@ -90,17 +112,26 @@ export default function MintPage() {
         throw new Error("Contract address is not defined in environment variables.");
       }
 
+      console.log("Calling writeContract with:", {
+        address: contractAddress,
+        functionName: 'mintNFT',
+        args: [tokenURI],
+        account: address,
+      });
+
       toast({
         title: "Minting NFT...",
         description: "Please confirm the transaction in your wallet.",
       });
 
-      writeContract({
+      const result = writeContract({
         address: contractAddress,
         abi: contractAbi,
         functionName: 'mintNFT',
         args: [tokenURI],
       });
+
+      console.log("writeContract called, result:", result);
 
     } catch (error) {
       console.error("Minting error:", error);
@@ -125,6 +156,18 @@ export default function MintPage() {
       setDescription("");
     }
   }, [isConfirmed, hash, toast]);
+
+  // Handle write errors
+  React.useEffect(() => {
+    if (writeError) {
+      console.error("Write contract error:", writeError);
+      toast({
+        title: "Transaction Failed",
+        description: writeError.message || "Failed to send transaction. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [writeError, toast]);
 
   const isProcessing = isMinting || isConfirming;
 
@@ -176,7 +219,19 @@ export default function MintPage() {
               <Textarea id="description" placeholder="e.g. 'A beautiful painting capturing the serene sunset...'" value={description} onChange={(e) => setDescription(e.target.value)} disabled={isProcessing} />
             </div>
 
-            <Button onClick={handleMint} disabled={isProcessing} className="w-full">
+            {!isConnected && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ Please connect your wallet using the "Connect Wallet" button in the navigation bar.
+              </div>
+            )}
+
+            {isConnected && chainId !== 127823 && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ Wrong network! Please switch to Etherlink Shadownet (Chain ID: 127823) in your wallet.
+              </div>
+            )}
+
+            <Button onClick={handleMint} disabled={isProcessing || !isConnected} className="w-full">
               {isProcessing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
